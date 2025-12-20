@@ -79,7 +79,7 @@ Before you begin, ensure you have the following installed:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/resume-parser-ai.git
+git clone https://github.com/Kallappa2005/resume-parser-ai.git
 cd resume-parser-ai
 ```
 
@@ -394,9 +394,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Tailwind CSS** - For beautiful and responsive design
 - **Open Source Community** - For the amazing tools and libraries
 
-## 📞 Support
+## Support
 
-For support, email support@resumeparserai.com or join our Slack channel.
+For support, email kallappakabbur874@gmail.com.
 
 ## 🔄 Changelog
 
@@ -410,5 +410,3 @@ For support, email support@resumeparserai.com or join our Slack channel.
 - Responsive web design
 
 ---
-
-**Built with ❤️ by the Resume Parser AI Team**
