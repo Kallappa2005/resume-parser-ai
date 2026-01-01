@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import apiService from '../../services/api';
 import CreateJobForm from './CreateJobForm';
+import ViewApplicationsModal from './ViewApplicationsModal';
 
 const HRDashboard = () => {
   const { user, logout } = useAuth();
@@ -13,6 +14,7 @@ const HRDashboard = () => {
   const [recentJobs, setRecentJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateJob, setShowCreateJob] = useState(false);
+  const [showViewApplications, setShowViewApplications] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -21,14 +23,19 @@ const HRDashboard = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getJobs();
-      const jobs = response.jobs || [];
+      const [jobsResponse, resumesResponse] = await Promise.all([
+        apiService.getJobs(),
+        apiService.getResumes()
+      ]);
+      
+      const jobs = jobsResponse.jobs || [];
+      const resumes = resumesResponse.resumes || [];
       
       setRecentJobs(jobs.slice(0, 5)); // Show latest 5 jobs
       setStats({
         totalJobs: jobs.length,
         activeJobs: jobs.filter(job => job.is_active).length,
-        totalApplications: jobs.reduce((total, job) => total + (job.resumes_count || 0), 0)
+        totalApplications: resumes.length
       });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -188,7 +195,10 @@ const HRDashboard = () => {
                         </div>
                       </div>
                       <div className="flex space-x-2">
-                        <button className="text-indigo-600 hover:text-indigo-500 text-sm font-medium">
+                        <button 
+                          onClick={() => setShowViewApplications(true)}
+                          className="text-indigo-600 hover:text-indigo-500 text-sm font-medium"
+                        >
                           View Applications
                         </button>
                         <button className="text-gray-600 hover:text-gray-500 text-sm font-medium">
@@ -219,7 +229,10 @@ const HRDashboard = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer">
+          <div 
+            className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer" 
+            onClick={() => setShowViewApplications(true)}
+          >
             <div className="flex items-center">
               <div className="p-3 bg-green-100 rounded-full">
                 <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -248,6 +261,13 @@ const HRDashboard = () => {
           </div>
         </div>
       </main>
+
+      {/* View Applications Modal */}
+      {showViewApplications && (
+        <ViewApplicationsModal
+          onClose={() => setShowViewApplications(false)}
+        />
+      )}
 
       {/* Create Job Form Modal */}
       {showCreateJob && (

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import apiService from '../../services/api';
+import JobApplicationModal from './JobApplicationModal';
 
 const CandidateDashboard = () => {
   const { user, logout } = useAuth();
@@ -8,6 +9,8 @@ const CandidateDashboard = () => {
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('jobs'); // 'jobs' or 'applications'
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [showApplicationModal, setShowApplicationModal] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -28,6 +31,17 @@ const CandidateDashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleApplyToJob = (job) => {
+    setSelectedJob(job);
+    setShowApplicationModal(true);
+  };
+
+  const handleApplicationSubmitted = (newApplication) => {
+    // Refresh applications list
+    loadDashboardData();
+    setShowApplicationModal(false);
   };
 
   const handleLogout = () => {
@@ -196,12 +210,33 @@ const CandidateDashboard = () => {
                             📍 {job.location} • 💼 {job.experience_required} • 💰 {job.salary_range}
                           </p>
                           <p className="text-gray-700 mt-3 line-clamp-3">{job.description_text}</p>
+                          
+                          {/* Skills Required */}
+                          {job.skills_required && job.skills_required.length > 0 && (
+                            <div className="mt-3">
+                              <span className="text-sm font-medium text-gray-700">Skills Required: </span>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {job.skills_required.map((skill, index) => (
+                                  <span 
+                                    key={index}
+                                    className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full"
+                                  >
+                                    {skill}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
                           <div className="mt-4 flex items-center text-sm text-gray-500">
                             <span>Posted: {new Date(job.created_at).toLocaleDateString()}</span>
                           </div>
                         </div>
                         <div className="ml-6">
-                          <button className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium">
+                          <button 
+                            onClick={() => handleApplyToJob(job)}
+                            className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium"
+                          >
                             Apply Now
                           </button>
                         </div>
@@ -269,6 +304,15 @@ const CandidateDashboard = () => {
           </div>
         )}
       </main>
+
+      {/* Job Application Modal */}
+      {showApplicationModal && selectedJob && (
+        <JobApplicationModal
+          job={selectedJob}
+          onClose={() => setShowApplicationModal(false)}
+          onApplicationSubmitted={handleApplicationSubmitted}
+        />
+      )}
     </div>
   );
 };

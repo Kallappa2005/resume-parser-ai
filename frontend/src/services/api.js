@@ -51,7 +51,7 @@ class ApiService {
       
       return await response.text();
     } catch (error) {
-      console.error(`API Request failed: ${method} ${endpoint}`, error);
+      console.error(`API Request failed: ${options.method || 'GET'} ${endpoint}`, error);
       throw error;
     }
   }
@@ -124,6 +124,12 @@ class ApiService {
     });
   }
 
+  async getResumes() {
+    return this.request('/resumes/list', {
+      method: 'GET',
+    });
+  }
+
   async getJobResumes(jobId) {
     return this.request(`/resumes/job/${jobId}`, {
       method: 'GET',
@@ -141,6 +147,19 @@ class ApiService {
     return this.request(`/resumes/${resumeId}`, {
       method: 'GET',
     });
+  }
+
+  async downloadResume(resumeId) {
+    const response = await fetch(`${this.baseURL}/resumes/${resumeId}/download`, {
+      method: 'GET',
+      headers: this.getAuthHeader()
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to download resume');
+    }
+    
+    return response.blob();
   }
 
   // Health check

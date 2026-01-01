@@ -42,11 +42,10 @@ const CreateJobForm = ({ onClose, onJobCreated }) => {
         return;
       }
 
-      // Convert skills and requirements to arrays if they're strings
+      // Convert skills_required to array, keep requirements as string
       const jobData = {
         ...formData,
-        skills_required: formData.skills_required.split(',').map(skill => skill.trim()).filter(skill => skill),
-        requirements: formData.requirements.split('\n').filter(req => req.trim())
+        skills_required: formData.skills_required.split(',').map(skill => skill.trim()).filter(skill => skill)
       };
 
       const response = await apiService.createJob(jobData);
