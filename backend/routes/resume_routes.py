@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models.user_model import User
 from models.job_model import JobDescription
@@ -7,6 +7,7 @@ from config.database import db
 import os
 from datetime import datetime
 from werkzeug.utils import secure_filename
+from services.resume_parser import resume_parser, job_matcher
 
 resume_bp = Blueprint('resumes', __name__)
 
@@ -76,14 +77,42 @@ def upload_resume():
         # Save file
         file.save(file_path)
         
-        # Create resume record
+        # Parse resume using our parsing service
+        try:
+            parsed_data = resume_parser.parse_resume(file_path)
+            
+            # Calculate match score with job requirements
+            job_data = {
+                'skills_required': job.get_skills_required() or [],
+                'experience_required': job.experience_required or ''
+            }
+            match_score = job_matcher.calculate_match_score(parsed_data, job_data)
+            
+        except Exception as parsing_error:
+            print(f"Parsing error: {parsing_error}")
+            # If parsing fails, continue with empty data
+            parsed_data = {
+                'raw_text': '',
+                'skills': [],
+                'experience': [],
+                'education': [],
+                'total_experience_years': 0,
+                'parsing_status': 'failed'
+            }
+            match_score = 0
+        
+        # Create resume record with parsed data
         resume = Resume(
             candidate_id=user_id,
             job_id=job_id,
             filename=filename,
             file_path=file_path,
+            match_score=match_score,
             status='pending'
         )
+        
+        # Use the model method to properly serialize parsed_data
+        resume.set_parsed_data(parsed_data)
         
         db.session.add(resume)
         db.session.commit()
@@ -129,12 +158,75 @@ def get_my_applications():
     except Exception as e:
         return jsonify({'error': f'Failed to get applications: {str(e)}'}), 500
 
+@resume_bp.route('/list', methods=['GET'])
+@jwt_required()
+def list_resumes():
+    """Get all resumes (HR only)"""
+    try:
+        # Convert string identity back to int
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        
+        # Check if user is HR
+        if not user or user.role != 'HR':
+            return jsonify({'error': 'Only HR can view all resumes'}), 403
+        
+        # Get all resumes
+        resumes = Resume.query.filter(
+            Resume.status != 'deleted'
+        ).order_by(
+            Resume.uploaded_at.desc()
+        ).all()
+        
+        resume_list = [resume.to_dict(include_job_details=True) for resume in resumes]
+        
+        return jsonify({
+            'resumes': resume_list,
+            'count': len(resume_list)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to get resumes: {str(e)}'}), 500
+
+@resume_bp.route('/<int:resume_id>/download', methods=['GET'])
+@jwt_required()
+def download_resume(resume_id):
+    """Download resume file (HR only)"""
+    try:
+        # Convert string identity back to int
+        user_id = int(get_jwt_identity())
+        user = User.query.get(user_id)
+        
+        # Check if user is HR
+        if not user or user.role != 'HR':
+            return jsonify({'error': 'Only HR can download resumes'}), 403
+        
+        # Get the resume
+        resume = Resume.query.get(resume_id)
+        if not resume:
+            return jsonify({'error': 'Resume not found'}), 404
+        
+        # Check if file exists
+        if not os.path.exists(resume.file_path):
+            return jsonify({'error': 'Resume file not found on server'}), 404
+        
+        return send_file(
+            resume.file_path,
+            as_attachment=True,
+            download_name=resume.filename,
+            mimetype='application/octet-stream'
+        )
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to download resume: {str(e)}'}), 500
+
 @resume_bp.route('/<int:resume_id>/status', methods=['PUT'])
 @jwt_required()
 def update_resume_status(resume_id):
     """Update resume status (HR only)"""
     try:
-        user_id = get_jwt_identity()
+        # Convert string identity back to int
+        user_id = int(get_jwt_identity())
         user = User.query.get(user_id)
         
         # Check if user is HR

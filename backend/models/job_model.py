@@ -9,6 +9,10 @@ class JobDescription(db.Model):
     title = db.Column(db.String(200), nullable=False)
     company = db.Column(db.String(100), nullable=True)
     description_text = db.Column(db.Text, nullable=False)
+    requirements = db.Column(db.Text, nullable=True)
+    skills_required = db.Column(db.Text, nullable=True)  # JSON string of skills list
+    benefits = db.Column(db.Text, nullable=True)
+    job_type = db.Column(db.String(50), nullable=True, default='Full-time')
     extracted_skills = db.Column(db.Text, nullable=True)  # JSON string of skills list
     experience_required = db.Column(db.String(50), nullable=True)
     location = db.Column(db.String(100), nullable=True)
@@ -24,13 +28,27 @@ class JobDescription(db.Model):
         """Convert skills list to JSON string"""
         if skills_list:
             self.extracted_skills = json.dumps(skills_list)
+            
+    def set_skills_required(self, skills_list):
+        """Convert required skills list to JSON string"""
+        if skills_list:
+            self.skills_required = json.dumps(skills_list)
     
     def get_skills(self):
         """Convert JSON string back to skills list"""
         if self.extracted_skills:
             try:
                 return json.loads(self.extracted_skills)
-            except:
+            except (json.JSONDecodeError, TypeError):
+                return []
+        return []
+        
+    def get_skills_required(self):
+        """Convert required skills JSON string back to skills list"""
+        if self.skills_required:
+            try:
+                return json.loads(self.skills_required)
+            except (json.JSONDecodeError, TypeError):
                 return []
         return []
     
@@ -41,6 +59,10 @@ class JobDescription(db.Model):
             'title': self.title,
             'company': self.company,
             'description_text': self.description_text,
+            'requirements': self.requirements,
+            'skills_required': self.get_skills_required(),
+            'benefits': self.benefits,
+            'job_type': self.job_type,
             'extracted_skills': self.get_skills(),
             'experience_required': self.experience_required,
             'location': self.location,

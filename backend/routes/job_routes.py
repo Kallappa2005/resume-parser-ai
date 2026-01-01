@@ -32,11 +32,20 @@ def create_job():
             title=data['title'],
             company=data.get('company', ''),
             description_text=data['description_text'],
+            requirements=data.get('requirements', ''),
+            benefits=data.get('benefits', ''),
+            job_type=data.get('job_type', 'Full-time'),
             experience_required=data.get('experience_required', ''),
             location=data.get('location', ''),
             salary_range=data.get('salary_range', ''),
+            is_active=data.get('is_active', True),
             created_by=user_id
         )
+        
+        # Handle skills_required field
+        skills_required = data.get('skills_required', [])
+        if isinstance(skills_required, list):
+            job.set_skills_required(skills_required)
         
         db.session.add(job)
         db.session.commit()
@@ -73,7 +82,7 @@ def list_jobs():
                 is_active=True
             ).order_by(JobDescription.created_at.desc()).all()
         
-        jobs_list = [job.to_dict() for job in jobs]
+        jobs_list = [job.to_dict(include_resumes=True) for job in jobs]
         
         return jsonify({
             'jobs': jobs_list,
