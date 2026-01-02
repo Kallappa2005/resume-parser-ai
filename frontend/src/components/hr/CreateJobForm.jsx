@@ -12,6 +12,7 @@ const CreateJobForm = ({ onClose, onJobCreated }) => {
     description_text: '',
     requirements: '',
     skills_required: '',
+    skills_preferred: '',
     benefits: '',
     is_active: true
   });
@@ -42,10 +43,11 @@ const CreateJobForm = ({ onClose, onJobCreated }) => {
         return;
       }
 
-      // Convert skills_required to array, keep requirements as string
+      // Convert skills to arrays, keep requirements as string
       const jobData = {
         ...formData,
-        skills_required: formData.skills_required.split(',').map(skill => skill.trim()).filter(skill => skill)
+        skills_required: formData.skills_required.split(',').map(skill => skill.trim()).filter(skill => skill),
+        skills_preferred: formData.skills_preferred.split(',').map(skill => skill.trim()).filter(skill => skill)
       };
 
       const response = await apiService.createJob(jobData);
@@ -217,7 +219,8 @@ const CreateJobForm = ({ onClose, onJobCreated }) => {
           {/* Skills Required */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Skills Required
+              Skills Required *
+              <span className="text-sm text-gray-500 font-normal"> (Must-have skills)</span>
             </label>
             <input
               type="text"
@@ -225,7 +228,23 @@ const CreateJobForm = ({ onClose, onJobCreated }) => {
               value={formData.skills_required}
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="e.g., Python, React, Node.js, AWS (separate by commas)"
+              placeholder="e.g., Python, React, Node.js (separate by commas)"
+            />
+          </div>
+
+          {/* Skills Preferred */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Skills Preferred
+              <span className="text-sm text-gray-500 font-normal"> (Nice-to-have skills)</span>
+            </label>
+            <input
+              type="text"
+              name="skills_preferred"
+              value={formData.skills_preferred}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="e.g., AWS, Docker, Kubernetes (separate by commas)"
             />
           </div>
 

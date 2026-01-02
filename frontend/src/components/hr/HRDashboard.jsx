@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import apiService from '../../services/api';
 import CreateJobForm from './CreateJobForm';
+import EditJobModal from './EditJobModal';
+import JobAnalyticsModal from './JobAnalyticsModal';
 import ViewApplicationsModal from './ViewApplicationsModal';
 
 const HRDashboard = () => {
@@ -9,12 +11,23 @@ const HRDashboard = () => {
   const [stats, setStats] = useState({
     totalJobs: 0,
     totalApplications: 0,
-    activeJobs: 0
+    activeJobs: 0,
+    archivedJobs: 0
   });
-  const [recentJobs, setRecentJobs] = useState([]);
+  const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateJob, setShowCreateJob] = useState(false);
   const [showViewApplications, setShowViewApplications] = useState(false);
+  const [selectedJob, setSelectedJob] = useState(null);
+  const [showEditJob, setShowEditJob] = useState(false);
+  const [showJobAnalytics, setShowJobAnalytics] = useState(false);
+  const [showArchivedJobs, setShowArchivedJobs] = useState(false);
+
+  // Get recent active jobs (limit to 5 most recent)
+  const displayJobs = showArchivedJobs 
+    ? jobs.filter(job => job.archived_at) 
+    : jobs.filter(job => !job.archived_at);
+  const recentJobs = displayJobs.slice(0, 5);
 
   useEffect(() => {
     loadDashboardData();
@@ -24,17 +37,18 @@ const HRDashboard = () => {
     try {
       setLoading(true);
       const [jobsResponse, resumesResponse] = await Promise.all([
-        apiService.getJobs(),
+        apiService.getJobs(true), // Include archived jobs for full stats
         apiService.getResumes()
       ]);
       
-      const jobs = jobsResponse.jobs || [];
+      const allJobs = jobsResponse.jobs || [];
       const resumes = resumesResponse.resumes || [];
       
-      setRecentJobs(jobs.slice(0, 5)); // Show latest 5 jobs
+      setJobs(allJobs);
       setStats({
-        totalJobs: jobs.length,
-        activeJobs: jobs.filter(job => job.is_active).length,
+        totalJobs: allJobs.length,
+        activeJobs: jobsResponse.active_count || 0,
+        archivedJobs: jobsResponse.archived_count || 0,
         totalApplications: resumes.length
       });
     } catch (error) {
@@ -46,6 +60,31 @@ const HRDashboard = () => {
 
   const handleLogout = () => {
     logout();
+  };
+
+  const handleEditJob = (job) => {
+    setSelectedJob(job);
+    setShowEditJob(true);
+  };
+
+  const handleViewAnalytics = (job) => {
+    setSelectedJob(job);
+    setShowJobAnalytics(true);
+  };
+
+  const handleJobUpdated = () => {
+    loadDashboardData();
+    setShowEditJob(false);
+    setSelectedJob(null);
+  };
+
+  const handleArchiveJob = async (jobId) => {
+    try {
+      await apiService.archiveJob(jobId);
+      loadDashboardData();
+    } catch (error) {
+      console.error('Failed to archive job:', error);
+    }
   };
 
   if (loading) {
@@ -152,13 +191,20 @@ const HRDashboard = () => {
         <div className="bg-white shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">Recent Job Postings</h3>
-              <button
-                onClick={() => setShowCreateJob(true)}
-                className="text-indigo-600 hover:text-indigo-500 text-sm font-medium"
-              >
-                View All →
-              </button>
+              <h3 className="text-lg leading-6 font-medium text-gray-900">
+                {showArchivedJobs ? 'Archived Jobs' : 'Recent Job Postings'}
+              </h3>
+              <div className="flex space-x-4">
+                <span className="text-sm text-gray-500">
+                  Showing {displayJobs.length} {showArchivedJobs ? 'archived' : 'active'} jobs
+                </span>
+                <button
+                  onClick={() => setShowCreateJob(true)}
+                  className="text-indigo-600 hover:text-indigo-500 text-sm font-medium"
+                >
+                  {showArchivedJobs ? 'Create New Job' : 'View All'} →
+                </button>
+              </div>
             </div>
             
             {recentJobs.length === 0 ? (
@@ -191,18 +237,44 @@ const HRDashboard = () => {
                         <div className="mt-2 flex items-center space-x-4 text-sm text-gray-500">
                           <span>Applications: {job.resumes_count || 0}</span>
                           <span>•</span>
-                          <span>Status: {job.is_active ? 'Active' : 'Inactive'}</span>
+                          <span>Views: {job.view_count || 0}</span>
+                          <span>•</span>
+                          <span>Status: {job.archived_at ? 'Archived' : 'Active'}</span>
+                          {job.archived_at && (
+                            <>
+                              <span>•</span>
+                              <span>Archived: {new Date(job.archived_at).toLocaleDateString()}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <div className="flex space-x-2">
                         <button 
-                          onClick={() => setShowViewApplications(true)}
+                          onClick={() => {
+                            setSelectedJob(job);
+                            setShowViewApplications(true);
+                          }}
                           className="text-indigo-600 hover:text-indigo-500 text-sm font-medium"
                         >
-                          View Applications
+                          Applications
                         </button>
-                        <button className="text-gray-600 hover:text-gray-500 text-sm font-medium">
+                        <button 
+                          onClick={() => handleEditJob(job)}
+                          className="text-blue-600 hover:text-blue-500 text-sm font-medium"
+                        >
                           Edit
+                        </button>
+                        <button 
+                          onClick={() => handleViewAnalytics(job)}
+                          className="text-green-600 hover:text-green-500 text-sm font-medium"
+                        >
+                          Analytics
+                        </button>
+                        <button 
+                          onClick={() => handleArchiveJob(job.id)}
+                          className={job.archived_at ? "text-green-600 hover:text-green-500 text-sm font-medium" : "text-red-600 hover:text-red-500 text-sm font-medium"}
+                        >
+                          {job.archived_at ? 'Reactivate' : 'Archive'}
                         </button>
                       </div>
                     </div>
@@ -246,16 +318,23 @@ const HRDashboard = () => {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer">
+          <div 
+            className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition-shadow cursor-pointer" 
+            onClick={() => setShowArchivedJobs(!showArchivedJobs)}
+          >
             <div className="flex items-center">
               <div className="p-3 bg-purple-100 rounded-full">
                 <svg className="w-6 h-6 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2-2V7a2 2 0 012-2h2a2 2 0 002 2v2a2 2 0 002 2h2a2 2 0 012-2V7a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 00-2 2h-2a2 2 0 00-2 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h8a2 2 0 002-2V8m-9 4h4" />
                 </svg>
               </div>
               <div className="ml-4">
-                <h3 className="text-lg font-medium text-gray-900">Analytics</h3>
-                <p className="text-gray-600">View hiring metrics</p>
+                <h3 className="text-lg font-medium text-gray-900">
+                  {showArchivedJobs ? 'Hide' : 'Show'} Archived Jobs ({stats.archivedJobs})
+                </h3>
+                <p className="text-gray-600">
+                  {showArchivedJobs ? 'Hide archived job postings' : 'View archived job postings'}
+                </p>
               </div>
             </div>
           </div>
@@ -265,7 +344,11 @@ const HRDashboard = () => {
       {/* View Applications Modal */}
       {showViewApplications && (
         <ViewApplicationsModal
-          onClose={() => setShowViewApplications(false)}
+          onClose={() => {
+            setShowViewApplications(false);
+            setSelectedJob(null);
+          }}
+          selectedJob={selectedJob}
         />
       )}
 
@@ -276,6 +359,29 @@ const HRDashboard = () => {
           onJobCreated={(newJob) => {
             // Refresh dashboard data after job creation
             loadDashboardData();
+          }}
+        />
+      )}
+
+      {/* Edit Job Modal */}
+      {showEditJob && selectedJob && (
+        <EditJobModal
+          job={selectedJob}
+          onClose={() => {
+            setShowEditJob(false);
+            setSelectedJob(null);
+          }}
+          onJobUpdated={handleJobUpdated}
+        />
+      )}
+
+      {/* Job Analytics Modal */}
+      {showJobAnalytics && selectedJob && (
+        <JobAnalyticsModal
+          job={selectedJob}
+          onClose={() => {
+            setShowJobAnalytics(false);
+            setSelectedJob(null);
           }}
         />
       )}

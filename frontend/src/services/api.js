@@ -84,15 +84,34 @@ class ApiService {
   }
 
   // Job APIs
-  async createJob(jobData) {
-    return this.request('/jobs/create', {
-      method: 'POST',
+  async updateJob(jobId, jobData) {
+    return this.request(`/jobs/${jobId}`, {
+      method: 'PUT',
       body: JSON.stringify(jobData),
     });
   }
 
-  async getJobs() {
-    return this.request('/jobs/list', {
+  async archiveJob(jobId) {
+    return this.request(`/jobs/${jobId}/archive`, {
+      method: 'PUT',
+    });
+  }
+
+  async getJobAnalytics(jobId) {
+    return this.request(`/jobs/${jobId}/analytics`, {
+      method: 'GET',
+    });
+  }
+
+  async getJobDetails(jobId) {
+    return this.request(`/jobs/${jobId}`, {
+      method: 'GET',
+    });
+  }
+
+  async getJobs(includeArchived = false) {
+    const params = includeArchived ? '?include_archived=true' : '';
+    return this.request(`/jobs/list${params}`, {
       method: 'GET',
     });
   }
@@ -124,8 +143,20 @@ class ApiService {
     });
   }
 
-  async getResumes() {
-    return this.request('/resumes/list', {
+  async getResumes(filters = {}) {
+    // Build query string from filters
+    const params = new URLSearchParams();
+    
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        params.append(key, value.toString());
+      }
+    });
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/resumes/list?${queryString}` : '/resumes/list';
+    
+    return this.request(endpoint, {
       method: 'GET',
     });
   }
@@ -160,6 +191,33 @@ class ApiService {
     }
     
     return response.blob();
+  }
+
+  async toggleShortlist(resumeId) {
+    return this.request(`/resumes/${resumeId}/shortlist`, {
+      method: 'PUT',
+    });
+  }
+
+  async compareResumes(resumeIds) {
+    return this.request('/resumes/compare', {
+      method: 'POST',
+      body: JSON.stringify({ resume_ids: resumeIds }),
+    });
+  }
+
+  async getRankedCandidates(jobId, options = {}) {
+    const params = new URLSearchParams();
+    if (options.limit) params.append('limit', options.limit);
+    if (options.status && options.status !== 'all') params.append('status', options.status);
+    if (options.min_score) params.append('min_score', options.min_score);
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/resumes/job/${jobId}/ranked?${queryString}` : `/resumes/job/${jobId}/ranked`;
+    
+    return this.request(endpoint, {
+      method: 'GET',
+    });
   }
 
   // Health check
