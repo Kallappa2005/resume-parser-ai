@@ -25,14 +25,45 @@ class ResumeParser:
             logging.info("Using basic text processing without NLP model")
     
     def extract_text_from_pdf(self, file_path: str) -> str:
-        """Extract text from PDF file"""
+        """Extract text from PDF file using multiple methods"""
+        text = ""
+        
         try:
-            text = ""
+            # Method 1: Try PyPDF2 first
             with open(file_path, 'rb') as file:
                 pdf_reader = PyPDF2.PdfReader(file)
                 for page in pdf_reader.pages:
-                    text += page.extract_text() + "\n"
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+            
+            # If we got substantial text, return it
+            if len(text.strip()) > 50:
+                return text.strip()
+            
+            # Method 2: Try alternative approach with more flexible extraction
+            logging.warning(f"PyPDF2 extracted minimal text ({len(text)} chars), trying alternative method")
+            
+            try:
+                import fitz  # PyMuPDF
+                doc = fitz.open(file_path)
+                alternative_text = ""
+                for page in doc:
+                    alternative_text += page.get_text() + "\n"
+                doc.close()
+                
+                if len(alternative_text.strip()) > len(text.strip()):
+                    logging.info("PyMuPDF extracted more text, using it")
+                    return alternative_text.strip()
+                    
+            except ImportError:
+                logging.warning("PyMuPDF not available, install with: pip install PyMuPDF")
+            except Exception as e:
+                logging.warning(f"PyMuPDF extraction failed: {e}")
+            
+            # Return whatever we got
             return text.strip()
+            
         except Exception as e:
             logging.error(f"Error extracting text from PDF: {e}")
             return ""
@@ -210,7 +241,7 @@ class ResumeParser:
         experiences = []
         total_years = 0
         
-        # Look for experience sections
+        # Look for experience sections and also scan full text for experience mentions
         experience_section = ""
         lines = text.split('\n')
         
@@ -230,37 +261,177 @@ class ResumeParser:
             if in_experience_section:
                 experience_section += line + "\n"
         
-        # Parse individual experiences
+        # Enhanced job parsing patterns for the specific format in the resume
         exp_patterns = [
-            r'([A-Z][^|\n]*?)\s*(?:\||at|@)\s*([A-Z][^|\n]*?)\s*(?:\||\()([^)]*(?:months?|years?).*?)(?:\)|\n)',
-            r'([A-Z][^|\n]*?)\s+\(([^)]*(?:months?|years?).*?)\)',
-            r'([A-Z][^|\n]*?)\s*-\s*([^|\n]*?)\s*\(([^)]*(?:months?|years?).*?)\)'
+            # Pattern 1: "Position | Company | Date - Date (Duration)" - Main format
+            r'([A-Z][a-zA-Z\s]+(?:Developer|Engineer|Manager|Analyst|Specialist|Programmer)[^|\n]*?)\s*\|\s*([^|\n]+?(?:LLC|Inc|Corp|Company|Solutions|Group|Tech)[^|\n]*?)\s*\|\s*([A-Za-z]+ \d{4} - (?:Present|[A-Za-z]+ \d{4}))',
+            
+            # Pattern 2: Job title on separate line, company and dates following
+            r'([A-Z][a-zA-Z\s]+(?:Developer|Engineer|Manager|Analyst|Specialist))\s*[\n\r]+([^|\n]+(?:LLC|Inc|Corp|Company|Solutions|Group))[^|\n]*[\n\r]*([A-Za-z]+ \d{4} - (?:Present|[A-Za-z]+ \d{4}))',
+            
+            # Pattern 3: Simple "Position | Company" format (company names with common suffixes)
+            r'([A-Z][a-zA-Z\s]+(?:Developer|Engineer|Manager|Analyst|Specialist)[^|\n]*?)\s*\|\s*([A-Z][^|\n]+?(?:LLC|Inc|Corp|Company|Solutions|Group|Tech))',
+            
+            # Pattern 4: Alternative format with "at" 
+            r'([A-Z][a-zA-Z\s]+(?:Developer|Engineer|Manager)[^|\n]*?)\s+at\s+([A-Z][^|\n]+?)\s*(?:\||\n)',
         ]
         
+        # First, look for date ranges in the experience section
+        date_ranges = []
+        date_patterns = [
+            r'([A-Za-z]+ \d{4})\s*-\s*(Present|[A-Za-z]+ \d{4})\s*(?:\([^)]+\))?',  # "Jan 2021 - Present (3 years)"
+            r'(\d{4})\s*-\s*(Present|\d{4})',                                        # "2021 - Present"
+        ]
+        
+        for pattern in date_patterns:
+            matches = re.findall(pattern, experience_section, re.IGNORECASE)
+            for start_date, end_date in matches:
+                date_ranges.append((start_date.strip(), end_date.strip()))
+        
+        # Parse job entries with improved logic
         for pattern in exp_patterns:
-            matches = re.findall(pattern, experience_section, re.IGNORECASE | re.MULTILINE)
+            matches = re.findall(pattern, experience_section, re.IGNORECASE | re.MULTILINE | re.DOTALL)
             for match in matches:
-                if len(match) >= 2:
-                    exp_dict = {
-                        'position': match[0].strip(),
-                        'company': match[1].strip() if len(match) > 1 else 'Not specified',
-                        'duration': match[2].strip() if len(match) > 2 else 'Not specified'
-                    }
-                    experiences.append(exp_dict)
+                position = match[0].strip()
+                company = match[1].strip()
+                duration = match[2].strip() if len(match) > 2 and match[2].strip() else ""
+                
+                # Clean up position and company
+                if not position or not company:
+                    continue
+                    
+                # If no duration captured in the pattern, try to find matching date range
+                if not duration and date_ranges:
+                    for i, (start_date, end_date) in enumerate(date_ranges):
+                        duration = f"{start_date} - {end_date}"
+                        date_ranges.pop(i)  # Remove used date range
+                        break
+                
+                exp_dict = {
+                    'position': position,
+                    'company': company,  
+                    'duration': duration or 'Not specified'
+                }
+                experiences.append(exp_dict)
         
-        # Calculate total experience from duration strings
-        duration_text = experience_section.lower()
+        # If structured parsing failed but we have date ranges, create generic entries
+        if not experiences and date_ranges:
+            for i, (start_date, end_date) in enumerate(date_ranges):
+                experiences.append({
+                    'position': f'Position {i+1}',
+                    'company': 'Company not specified',
+                    'duration': f"{start_date} - {end_date}"
+                })
         
-        # Look for year mentions
-        year_matches = re.findall(r'(\d+)[\s\-]*years?', duration_text)
-        month_matches = re.findall(r'(\d+)[\s\-]*months?', duration_text)
+        # Manual parsing for the specific Alex Smith format if patterns fail
+        if not experiences:
+            lines = experience_section.split('\n')
+            current_job = {}
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # Check if line contains job title + company + dates
+                if '|' in line and ('Developer' in line or 'Engineer' in line or 'Manager' in line):
+                    parts = [part.strip() for part in line.split('|')]
+                    if len(parts) >= 2:
+                        position = parts[0]
+                        company_and_date = parts[1]
+                        
+                        # Try to separate company from date
+                        company = company_and_date
+                        duration = ""
+                        
+                        # Look for date pattern at end
+                        date_match = re.search(r'([A-Za-z]+ \d{4} - (?:Present|[A-Za-z]+ \d{4}))', company_and_date)
+                        if date_match:
+                            duration = date_match.group(1)
+                            company = company_and_date.replace(duration, '').strip()
+                        
+                        experiences.append({
+                            'position': position,
+                            'company': company,
+                            'duration': duration or 'Not specified'
+                        })
         
-        years_from_years = sum(int(y) for y in year_matches) if year_matches else 0
-        years_from_months = sum(int(m) for m in month_matches) // 12 if month_matches else 0
+        # Calculate total experience more intelligently
+        duration_text = (experience_section + " " + text).lower()
         
-        total_years = max(years_from_years + years_from_months, len(experiences))
+        # Priority 1: Look for explicit professional summary mentions (most reliable)
+        summary_patterns = [
+            r'(?:experienced|seasoned|senior).*?with\s*(\d+)\s*years?\s*of\s*(?:expertise|experience)',
+            r'(\d+)\s*years?\s*of\s*(?:expertise|experience).*?(?:developer|engineer|professional)',
+            r'professional.*?with\s*(\d+)\s*years?',
+        ]
         
-        return experiences, total_years
+        summary_years = []
+        for pattern in summary_patterns:
+            matches = re.findall(pattern, duration_text)
+            for match in matches:
+                try:
+                    years = int(match)
+                    if 0 < years <= 50:  # Reasonable range
+                        summary_years.append(years)
+                except (ValueError, TypeError):
+                    continue
+        
+        # Priority 2: Calculate from actual job date ranges
+        calculated_years = []
+        for start_date, end_date in date_ranges:
+            try:
+                start_year = int(re.search(r'\d{4}', start_date).group())
+                current_year = 2026
+                
+                if 'present' in end_date.lower() or 'current' in end_date.lower():
+                    end_year = current_year
+                else:
+                    end_year_match = re.search(r'\d{4}', end_date)
+                    end_year = int(end_year_match.group()) if end_year_match else current_year
+                
+                if start_year > 0 and end_year >= start_year:
+                    duration = end_year - start_year
+                    calculated_years.append(max(duration, 1))  # At least 1 year for current jobs
+                        
+            except (ValueError, AttributeError):
+                continue
+        
+        # Priority 3: Look for explicit duration mentions in job descriptions
+        job_duration_patterns = [
+            r'\((\d+)\s*years?\)',      # "(3 years)"
+            r'\((\d+)\s*months?\)',     # "(6 months)" 
+        ]
+        
+        explicit_years = []
+        explicit_months = []
+        for pattern in job_duration_patterns:
+            matches = re.findall(pattern, duration_text)
+            for match in matches:
+                try:
+                    value = int(match)
+                    if 'year' in pattern:
+                        explicit_years.append(value)
+                    else:  # months
+                        explicit_months.append(value)
+                except (ValueError, TypeError):
+                    continue
+        
+        # Determine final total years using priority system
+        if summary_years:
+            # Trust professional summary most (like "3 years of expertise")
+            total_years = max(summary_years)
+        elif explicit_years:
+            # Use explicit job duration mentions
+            total_years = sum(explicit_years) + sum(explicit_months) // 12
+        elif calculated_years:
+            # Use calculated years from date ranges
+            total_years = sum(calculated_years)
+        else:
+            # Fallback to number of jobs or convert months
+            total_years = len(experiences) + sum(explicit_months) // 12
+        
+        return experiences, max(total_years, 0)
     
     def extract_education(self, text: str) -> List[Dict]:
         """Enhanced education extraction"""

@@ -110,7 +110,7 @@ class EnhancedJobMatcher:
                     best_match = similarity
                     best_match_skill = resume_skill
             
-            if best_match >= 0.8:  # Strong match threshold
+            if best_match >= 0.6:  # Lowered match threshold for better matching
                 required_matches += best_match
                 matched_skills.append({
                     'job_skill': req_skill,
@@ -130,7 +130,7 @@ class EnhancedJobMatcher:
                     best_match = similarity
                     best_match_skill = resume_skill
             
-            if best_match >= 0.8:
+            if best_match >= 0.6:  # Lowered threshold for preferred skills too
                 preferred_matches += best_match
                 matched_skills.append({
                     'job_skill': pref_skill,
