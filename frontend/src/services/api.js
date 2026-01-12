@@ -84,6 +84,13 @@ class ApiService {
   }
 
   // Job APIs
+  async createJob(jobData) {
+    return this.request('/jobs/create', {
+      method: 'POST',
+      body: JSON.stringify(jobData),
+    });
+  }
+
   async updateJob(jobId, jobData) {
     return this.request(`/jobs/${jobId}`, {
       method: 'PUT',
@@ -113,19 +120,6 @@ class ApiService {
     const params = includeArchived ? '?include_archived=true' : '';
     return this.request(`/jobs/list${params}`, {
       method: 'GET',
-    });
-  }
-
-  async getJobDetails(jobId) {
-    return this.request(`/jobs/${jobId}`, {
-      method: 'GET',
-    });
-  }
-
-  async updateJob(jobId, jobData) {
-    return this.request(`/jobs/${jobId}`, {
-      method: 'PUT',
-      body: JSON.stringify(jobData),
     });
   }
 
